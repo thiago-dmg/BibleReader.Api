@@ -1,0 +1,24 @@
+## .NET
+bin/
+obj/
+out/
+publish/
+*.user
+*.suo
+*.cache
+*.log
+.vs/
+.idea/
+
+## User secrets & local overrides
+appsettings.*.local.json
+**/secrets.json
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Build artifacts
+*.tar.gz
+build.log
+ef.log

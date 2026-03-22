@@ -1,0 +1,117 @@
+name: Deploy API to VPS
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: biblereader-api
+  REMOTE_DIR: /var/www/biblereader-api
+  API_PORT: 5001
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore BibleReader.Api.csproj
+
+      - name: Publish API
+        run: |
+          dotnet publish BibleReader.Api.csproj \
+            -c Release \
+            -o publish \
+            --no-restore
+
+      - name: Package artifact
+        run: |
+          tar -czf biblereader-api.tar.gz -C publish .
+
+      - name: Prepare systemd service
+        run: |
+          cat > biblereader-api.service <<EOF
+          [Unit]
+          Description=Bíblia Reader API (.NET 8)
+          After=network.target
+
+          [Service]
+          WorkingDirectory=${{ env.REMOTE_DIR }}/current
+          ExecStart=/usr/bin/dotnet BibleReader.Api.dll
+          Restart=always
+          RestartSec=5
+          KillSignal=SIGINT
+          SyslogIdentifier=biblereader-api
+          Environment=ASPNETCORE_ENVIRONMENT=Production
+          Environment=ASPNETCORE_URLS=http://0.0.0.0:${{ env.API_PORT }}
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+      - name: Upload package to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_SSH_HOST }}
+          username: ${{ secrets.VPS_SSH_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          source: "biblereader-api.tar.gz,biblereader-api.service"
+          target: "/tmp/deploy-${{ github.run_id }}"
+          overwrite: true
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_SSH_HOST }}
+          username: ${{ secrets.VPS_SSH_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+
+            SERVICE_NAME="${{ env.SERVICE_NAME }}"
+            REMOTE_DIR="${{ env.REMOTE_DIR }}"
+            RUN_DIR="/tmp/deploy-${{ github.run_id }}"
+            TAR="$RUN_DIR/biblereader-api.tar.gz"
+            COMMIT="${{ github.sha }}"
+
+            echo "Criando estrutura de pastas..."
+
+            sudo mkdir -p $REMOTE_DIR/releases
+
+            RELEASE_DIR=$REMOTE_DIR/releases/$COMMIT
+            sudo rm -rf $RELEASE_DIR
+            sudo mkdir -p $RELEASE_DIR
+
+            echo "Extraindo nova versão..."
+
+            sudo tar -xzf $TAR -C $RELEASE_DIR
+
+            echo "Atualizando symlink current..."
+
+            sudo ln -sfn $RELEASE_DIR $REMOTE_DIR/current
+
+            echo "Atualizando serviço systemd..."
+
+            sudo cp $RUN_DIR/biblereader-api.service /etc/systemd/system/$SERVICE_NAME.service
+
+            sudo systemctl daemon-reload
+            sudo systemctl enable $SERVICE_NAME
+            sudo systemctl restart $SERVICE_NAME
+
+            echo "Status do serviço:"
+
+            sudo systemctl status $SERVICE_NAME --no-pager
+
+            echo "Deploy concluído"
