@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using BibleReader.Api.Data;
 using BibleReader.Api.Interfaces;
 using BibleReader.Api.Services;
+using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;

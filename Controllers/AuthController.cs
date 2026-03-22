@@ -1,7 +1,6 @@
 using System.Net;
 using BibleReader.Api.Data;
 using BibleReader.Api.Extensions;
-using BibleReader.Api.Extensions;
 using BibleReader.Api.Interfaces;
 using BibleReader.Api.Models;
 using BibleReader.Api.Services;
@@ -128,7 +127,7 @@ public class AuthController : ControllerBase
         return await VerifyCoreAsync(token, db);
     }
 
-    private static async Task<IActionResult> VerifyCoreAsync(string token, AppDbContext db)
+    private async Task<IActionResult> VerifyCoreAsync(string token, AppDbContext db)
     {
         var verification = await db.EmailVerificationTokens
             .Include(x => x.AppUser)
