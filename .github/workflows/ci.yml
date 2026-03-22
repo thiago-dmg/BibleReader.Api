@@ -1,8 +1,7 @@
 name: CI
 
+# Só em PR — evita duplicar com "Deploy API to VPS" em cada push para main.
 on:
-  push:
-    branches: ["main", "master"]
   pull_request:
     branches: ["main", "master"]
   workflow_dispatch:
