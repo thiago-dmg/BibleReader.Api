@@ -20,15 +20,16 @@ public class BibleSeedService
 
         var version = new BibleVersion
         {
-            Id = 1,
             Code = "NVI",
             Name = "Nova Versão Internacional",
             IsActive = true
         };
+
         _db.BibleVersions.Add(version);
         await _db.SaveChangesAsync(ct);
 
         var globalOrder = 1;
+
         foreach (var def in BibleCanon.Protestant)
         {
             var book = new BibleBook
@@ -40,6 +41,7 @@ public class BibleSeedService
                 Abbreviation = def.Abbreviation,
                 ChapterCount = def.ChapterCount
             };
+
             _db.BibleBooks.Add(book);
             await _db.SaveChangesAsync(ct);
 
@@ -51,16 +53,17 @@ public class BibleSeedService
                     ChapterNumber = c,
                     GlobalOrder = globalOrder++
                 };
+
                 _db.BibleChapters.Add(chapter);
             }
         }
 
         await _db.SaveChangesAsync(ct);
 
-        // Versículos de exemplo (Gênesis 1) — importe o texto completo depois se necessário
         var genesis = await _db.BibleBooks.FirstAsync(b => b.Slug == "genesis", ct);
         var gen1 = await _db.BibleChapters.FirstAsync(
-            ch => ch.BibleBookId == genesis.Id && ch.ChapterNumber == 1, ct);
+            ch => ch.BibleBookId == genesis.Id && ch.ChapterNumber == 1,
+            ct);
 
         for (var v = 1; v <= 31; v++)
         {
