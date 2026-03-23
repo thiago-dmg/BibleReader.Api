@@ -22,3 +22,8 @@ Thumbs.db
 *.tar.gz
 build.log
 ef.log
+
+
+appsettings.json
+appsettings.Development.json
+appsettings.Production.json
