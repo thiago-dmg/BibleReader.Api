@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirmar e-mail - Bíblia Reader</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(180deg, #F7F2FF 0%, #FCFAFF 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            color: #2F2A3A;
+        }
+        .card {
+            width: 100%;
+            max-width: 430px;
+            background: #fff;
+            border: 1px solid #EEE7FF;
+            border-radius: 24px;
+            padding: 32px 28px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(76, 45, 131, 0.10);
+        }
+        .brand {
+            margin-bottom: 22px;
+            font-size: 24px;
+            font-weight: 700;
+            color: #4B2E83;
+        }
+        .icon-wrap {
+            width: 88px;
+            height: 88px;
+            margin: 0 auto 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .icon-wrap .icon-success,
+        .icon-wrap .icon-error { display: none; }
+        .icon-wrap.success .icon-success,
+        .icon-wrap.error .icon-error { display: block; }
+        .icon-wrap.success { background: #EAF8EE; }
+        .icon-wrap.success svg { stroke: #2E9E5B; }
+        .icon-wrap.error { background: #FDECEC; }
+        .icon-wrap.error svg { stroke: #D64545; }
+        .icon-wrap svg { width: 48px; height: 48px; }
+        h2 {
+            margin: 0 0 12px;
+            font-size: 24px;
+            color: #2F2A3A;
+        }
+        .message {
+            margin: 0 0 26px;
+            line-height: 1.5;
+            color: #655D74;
+            font-size: 16px;
+        }
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 14px 20px;
+            border-radius: 14px;
+            background: #6C4DFF;
+            color: #fff;
+            text-decoration: none;
+            font-weight: 700;
+            transition: .2s ease;
+        }
+        .btn:hover { background: #5B3EF0; }
+        .helper {
+            margin-top: 14px;
+            font-size: 13px;
+            color: #9B92AC;
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="brand">Bíblia Reader</div>
+
+        <div class="icon-wrap {{ICON_CLASS}}" id="statusIcon">
+            <span class="icon-success">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6L9 17l-5-5" />
+                </svg>
+            </span>
+
+            <span class="icon-error">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M15 9l-6 6M9 9l6 6" />
+                </svg>
+            </span>
+        </div>
+
+        <h2 id="pageTitle">{{TITLE}}</h2>
+        <p class="message" id="pageMessage">{{MESSAGE}}</p>
+
+        <a href="{{BUTTON_URL}}" class="btn" id="btnOpenApp">{{BUTTON_LABEL}}</a>
+
+        <div class="helper" id="helperText">
+            Você será redirecionado automaticamente quando possível.
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            var title = document.getElementById('pageTitle');
+            var message = document.getElementById('pageMessage');
+            var button = document.getElementById('btnOpenApp');
+            var iconWrap = document.getElementById('statusIcon');
+            var helperText = document.getElementById('helperText');
+
+            function isPlaceholder(value) {
+                return !value || value.indexOf('{{') !== -1;
+            }
+
+            var defaultTitle = 'Não foi possível concluir';
+            var defaultMessage = 'Não conseguimos validar este link agora.';
+            var defaultButtonLabel = 'Abrir app';
+            var defaultButtonUrl = 'bibliareader://login';
+
+            if (isPlaceholder(title.textContent)) title.textContent = defaultTitle;
+            if (isPlaceholder(message.textContent)) message.textContent = defaultMessage;
+            if (isPlaceholder(button.textContent)) button.textContent = defaultButtonLabel;
+            if (isPlaceholder(button.getAttribute('href'))) button.setAttribute('href', defaultButtonUrl);
+
+            if (iconWrap.className.indexOf('success') === -1 && iconWrap.className.indexOf('error') === -1) {
+                iconWrap.classList.add('error');
+            }
+
+            var href = button.getAttribute('href') || '';
+
+            if (!href || href === '#' || href.indexOf('{{') !== -1) {
+                button.classList.add('hidden');
+                helperText.textContent = 'Feche esta página e volte para o aplicativo.';
+                return;
+            }
+
+            if (href.indexOf('bibliareader://') !== -1) {
+                setTimeout(function () {
+                    window.location.href = href;
+                }, 2200);
+            } else {
+                helperText.textContent = '';
+            }
+        })();
+    </script>
+</body>
+</html>
