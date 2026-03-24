@@ -2,10 +2,11 @@
 
 public class ExternalBibleOptions
 {
-    public string Provider { get; set; } = "ApiBible";
-    public string BaseUrl { get; set; } = "";
+    public string BaseUrl { get; set; } = string.Empty;
     public bool Enabled { get; set; }
     public int TimeoutSeconds { get; set; } = 45;
-    public string ApiKey { get; set; } = "";
-    public string UserAgent { get; set; } = "";
+    public string ApiKey { get; set; } = string.Empty;
+    public string BearerToken { get; set; } = string.Empty;
+    public string DefaultVersionCode { get; set; } = string.Empty;
+    public string UserAgent { get; set; } = "BibleReader.Api";
 }
