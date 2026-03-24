@@ -13,6 +13,11 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddHttpClient<IBibleProviderService, AbibliaDigitalProviderService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+
 var sqlConnection = builder.Configuration.GetConnectionString("Default")
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Defina ConnectionStrings:Default ou DefaultConnection.");
