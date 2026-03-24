@@ -53,6 +53,7 @@ jobs:
           SyslogIdentifier=biblereader-api
           Environment=ASPNETCORE_ENVIRONMENT=Production
           Environment=ASPNETCORE_URLS=http://0.0.0.0:${{ env.API_PORT }}
+          EnvironmentFile=/etc/biblereader-api.env
 
           [Install]
           WantedBy=multi-user.target
@@ -87,31 +88,39 @@ jobs:
             COMMIT="${{ github.sha }}"
 
             echo "Criando estrutura de pastas..."
+            sudo mkdir -p "$REMOTE_DIR/releases"
 
-            sudo mkdir -p $REMOTE_DIR/releases
-
-            RELEASE_DIR=$REMOTE_DIR/releases/$COMMIT
-            sudo rm -rf $RELEASE_DIR
-            sudo mkdir -p $RELEASE_DIR
+            RELEASE_DIR="$REMOTE_DIR/releases/$COMMIT"
+            sudo rm -rf "$RELEASE_DIR"
+            sudo mkdir -p "$RELEASE_DIR"
 
             echo "Extraindo nova versão..."
+            sudo tar -xzf "$TAR" -C "$RELEASE_DIR"
 
-            sudo tar -xzf $TAR -C $RELEASE_DIR
+            echo "Validando artefato publicado..."
+            test -f "$RELEASE_DIR/BibleReader.Api.dll"
 
             echo "Atualizando symlink current..."
-
-            sudo ln -sfn $RELEASE_DIR $REMOTE_DIR/current
+            sudo ln -sfn "$RELEASE_DIR" "$REMOTE_DIR/current"
 
             echo "Atualizando serviço systemd..."
+            sudo cp "$RUN_DIR/biblereader-api.service" "/etc/systemd/system/$SERVICE_NAME.service"
 
-            sudo cp $RUN_DIR/biblereader-api.service /etc/systemd/system/$SERVICE_NAME.service
+            echo "Validando arquivo de ambiente..."
+            sudo test -f /etc/biblereader-api.env
 
+            echo "Recarregando systemd..."
             sudo systemctl daemon-reload
-            sudo systemctl enable $SERVICE_NAME
-            sudo systemctl restart $SERVICE_NAME
+            sudo systemctl enable "$SERVICE_NAME"
+            sudo systemctl restart "$SERVICE_NAME"
+
+            echo "Aguardando aplicação subir..."
+            sleep 8
 
             echo "Status do serviço:"
+            sudo systemctl status "$SERVICE_NAME" --no-pager -l
 
-            sudo systemctl status $SERVICE_NAME --no-pager
+            echo "Testando Swagger local..."
+            curl -f "http://127.0.0.1:${{ env.API_PORT }}/swagger/index.html" > /dev/null
 
-            echo "Deploy concluído"
+            echo "Deploy concluído com sucesso"
