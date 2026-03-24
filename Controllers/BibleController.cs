@@ -1,6 +1,6 @@
 using BibleReader.Api.Data;
-using BibleReader.Api.Services;
 using BibleReader.Api.ViewModels;
+using BibleReader.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,37 +13,52 @@ namespace BibleReader.Api.Controllers;
 public class BibleController : ControllerBase
 {
     [HttpGet("versions")]
-    public async Task<IActionResult> Versions([FromServices] AppDbContext db)
+    public async Task<IActionResult> Versions([FromServices] IBibleProviderService bibleProvider)
     {
-        var list = await db.BibleVersions
-            .AsNoTracking()
-            .Where(v => v.IsActive)
-            .Select(v => new { v.Id, v.Code, v.Name })
-            .ToListAsync();
-        return Ok(new ResultViewModel<object>(list));
+        var versions = await bibleProvider.GetVersionsAsync(HttpContext.RequestAborted);
+        return Ok(new ResultViewModel<object>(versions));
     }
 
     [HttpGet("books")]
-    public async Task<IActionResult> Books([FromQuery] int versionId, [FromServices] AppDbContext db)
+    public async Task<IActionResult> Books(
+        [FromQuery] string versionCode,
+        [FromServices] AppDbContext db,
+        [FromServices] IBibleProviderService bibleProvider)
     {
-        var list = await db.BibleBooks
+        if (string.IsNullOrWhiteSpace(versionCode))
+            return BadRequest(new ResultViewModel<string>("versionCode é obrigatório"));
+
+        var booksFromProvider = await bibleProvider.GetBooksAsync(versionCode, HttpContext.RequestAborted);
+
+        // Mantém compatibilidade com IDs locais usados no plano de leitura
+        var localBooks = await db.BibleBooks
             .AsNoTracking()
-            .Where(b => b.BibleVersionId == versionId)
+            .Include(b => b.BibleVersion)
+            .Where(b => b.BibleVersion.Code == versionCode)
             .OrderBy(b => b.Order)
-            .Select(b => new
+            .ToListAsync(HttpContext.RequestAborted);
+
+        var result = localBooks.Select(local =>
+        {
+            var providerBook = booksFromProvider.FirstOrDefault(x =>
+                x.Abbreviation.ToLower() == local.Abbreviation.ToLower() ||
+                x.Name.ToLower() == local.Name.ToLower());
+
+            return new
             {
-                b.Id,
-                b.Order,
-                b.Slug,
-                b.Name,
-                b.Abbreviation,
-                b.ChapterCount
-            })
-            .ToListAsync();
-        return Ok(new ResultViewModel<object>(list));
+                local.Id,
+                local.Order,
+                local.Slug,
+                local.Name,
+                local.Abbreviation,
+                local.ChapterCount,
+                externalId = providerBook?.ExternalId
+            };
+        });
+
+        return Ok(new ResultViewModel<object>(result));
     }
 
-    /// <summary>Lista números de capítulos do livro (metadados).</summary>
     [HttpGet("books/{bookId:int}/chapters")]
     public async Task<IActionResult> BookChapters(int bookId, [FromServices] AppDbContext db)
     {
@@ -51,8 +66,14 @@ public class BibleController : ControllerBase
             .AsNoTracking()
             .Where(c => c.BibleBookId == bookId)
             .OrderBy(c => c.ChapterNumber)
-            .Select(c => new { c.Id, c.ChapterNumber, c.GlobalOrder })
-            .ToListAsync();
+            .Select(c => new
+            {
+                c.Id,
+                c.ChapterNumber,
+                c.GlobalOrder
+            })
+            .ToListAsync(HttpContext.RequestAborted);
+
         return Ok(new ResultViewModel<object>(list));
     }
 
@@ -60,32 +81,45 @@ public class BibleController : ControllerBase
     public async Task<IActionResult> ChapterContent(
         int bookId,
         int chapterNumber,
+        [FromQuery] string versionCode,
         [FromServices] AppDbContext db,
-        [FromServices] BibleChapterTextSyncService textSync)
+        [FromServices] IBibleProviderService bibleProvider)
     {
-        await textSync.EnsureChapterTextAsync(db, bookId, chapterNumber, HttpContext.RequestAborted);
+        if (string.IsNullOrWhiteSpace(versionCode))
+            return BadRequest(new ResultViewModel<string>("versionCode é obrigatório"));
 
         var chapter = await db.BibleChapters
             .AsNoTracking()
             .Include(c => c.BibleBook)
-            .FirstOrDefaultAsync(c => c.BibleBookId == bookId && c.ChapterNumber == chapterNumber);
+            .ThenInclude(b => b.BibleVersion)
+            .FirstOrDefaultAsync(c => c.BibleBookId == bookId && c.ChapterNumber == chapterNumber, HttpContext.RequestAborted);
 
         if (chapter == null)
             return NotFound(new ResultViewModel<string>("Capítulo não encontrado"));
 
-        var verses = await db.BibleVerses
-            .AsNoTracking()
-            .Where(v => v.BibleChapterId == chapter.Id)
-            .OrderBy(v => v.VerseNumber)
-            .Select(v => new { v.VerseNumber, v.Text })
-            .ToListAsync();
+        var externalBookId = chapter.BibleBook.Abbreviation;
+        var chapterData = await bibleProvider.GetChapterAsync(
+            versionCode,
+            externalBookId,
+            chapterNumber,
+            HttpContext.RequestAborted);
 
         return Ok(new ResultViewModel<object>(new
         {
             chapter.Id,
-            book = new { chapter.BibleBook.Id, chapter.BibleBook.Name, chapter.BibleBook.Slug },
+            book = new
+            {
+                chapter.BibleBook.Id,
+                chapter.BibleBook.Name,
+                chapter.BibleBook.Slug,
+                chapter.BibleBook.Abbreviation
+            },
             chapter.ChapterNumber,
-            verses
+            verses = chapterData.Verses.Select(v => new
+            {
+                verseNumber = v.Number,
+                text = v.Text
+            })
         }));
     }
 
@@ -94,37 +128,46 @@ public class BibleController : ControllerBase
         int bookId,
         int chapterNumber,
         int verseNumber,
+        [FromQuery] string versionCode,
         [FromServices] AppDbContext db,
-        [FromServices] BibleChapterTextSyncService textSync)
+        [FromServices] IBibleProviderService bibleProvider)
     {
-        await textSync.EnsureChapterTextAsync(db, bookId, chapterNumber, HttpContext.RequestAborted);
+        if (string.IsNullOrWhiteSpace(versionCode))
+            return BadRequest(new ResultViewModel<string>("versionCode é obrigatório"));
 
         var chapter = await db.BibleChapters
             .AsNoTracking()
             .Include(c => c.BibleBook)
-            .FirstOrDefaultAsync(c => c.BibleBookId == bookId && c.ChapterNumber == chapterNumber);
+            .FirstOrDefaultAsync(c => c.BibleBookId == bookId && c.ChapterNumber == chapterNumber, HttpContext.RequestAborted);
 
         if (chapter == null)
             return NotFound(new ResultViewModel<string>("Capítulo não encontrado"));
 
-        var verse = await db.BibleVerses
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.BibleChapterId == chapter.Id && v.VerseNumber == verseNumber);
+        var externalBookId = chapter.BibleBook.Abbreviation;
+
+        var verse = await bibleProvider.GetVerseAsync(
+            versionCode,
+            externalBookId,
+            chapterNumber,
+            verseNumber,
+            HttpContext.RequestAborted);
 
         if (verse == null)
             return NotFound(new ResultViewModel<string>("Versículo não encontrado"));
 
         return Ok(new ResultViewModel<object>(new
         {
-            verse.Id,
-            book = new { chapter.BibleBook.Id, chapter.BibleBook.Name },
+            book = new
+            {
+                chapter.BibleBook.Id,
+                chapter.BibleBook.Name
+            },
             chapter.ChapterNumber,
-            verse.VerseNumber,
-            verse.Text
+            verseNumber = verse.Number,
+            text = verse.Text
         }));
     }
 
-    /// <summary>Atalho: lista todos os capítulos da versão (1189 linhas) — use com versionId.</summary>
     [HttpGet("chapters")]
     public async Task<IActionResult> AllChapters([FromQuery] int versionId, [FromServices] AppDbContext db)
     {
@@ -132,14 +175,20 @@ public class BibleController : ControllerBase
             .AsNoTracking()
             .Where(b => b.BibleVersionId == versionId)
             .Select(b => b.Id)
-            .ToListAsync();
+            .ToListAsync(HttpContext.RequestAborted);
 
         var list = await db.BibleChapters
             .AsNoTracking()
             .Where(c => bookIds.Contains(c.BibleBookId))
             .OrderBy(c => c.GlobalOrder)
-            .Select(c => new { c.Id, c.BibleBookId, c.ChapterNumber, c.GlobalOrder })
-            .ToListAsync();
+            .Select(c => new
+            {
+                c.Id,
+                c.BibleBookId,
+                c.ChapterNumber,
+                c.GlobalOrder
+            })
+            .ToListAsync(HttpContext.RequestAborted);
 
         return Ok(new ResultViewModel<object>(list));
     }

@@ -96,7 +96,6 @@ public class ReadingPlansController : ControllerBase
         return await DayInternal(db, plan.Id, today);
     }
 
-    /// <summary>Data no formato yyyy-MM-dd (ex.: 2025-03-20).</summary>
     [HttpGet("current/days/{date}")]
     public async Task<IActionResult> DayByDate(string date, [FromServices] AppDbContext db, [FromServices] ReadingPlanService plans)
     {
@@ -126,15 +125,18 @@ public class ReadingPlansController : ControllerBase
         if (day == null)
             return NotFound(new ResultViewModel<string>("Dia não encontrado neste plano"));
 
-        var chapters = day.Chapters.OrderBy(x => x.BibleChapter.GlobalOrder).Select(x => new
-        {
-            x.BibleChapterId,
-            book = x.BibleChapter.BibleBook.Name,
-            bookId = x.BibleChapter.BibleBookId,
-            chapterNumber = x.BibleChapter.ChapterNumber,
-            x.IsRead,
-            x.ReadAt
-        });
+        var chapters = day.Chapters
+            .OrderBy(x => x.BibleChapter.GlobalOrder)
+            .Select(x => new
+            {
+                x.BibleChapterId,
+                book = x.BibleChapter.BibleBook.Name,
+                bookId = x.BibleChapter.BibleBookId,
+                bookAbbreviation = x.BibleChapter.BibleBook.Abbreviation,
+                chapterNumber = x.BibleChapter.ChapterNumber,
+                x.IsRead,
+                x.ReadAt
+            });
 
         return Ok(new ResultViewModel<object>(new
         {
