@@ -23,6 +23,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ReadingPlanService>();
 builder.Services.AddScoped<BibleSeedService>();
+builder.Services.AddScoped<BibleChapterTextSyncService>();
+builder.Services.AddAbibliadigitalClient(builder.Configuration);
 
 if (string.IsNullOrWhiteSpace(builder.Configuration["SendGrid:ApiKey"]))
     builder.Services.AddSingleton<IEmailService, NullEmailService>();

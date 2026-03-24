@@ -1,4 +1,5 @@
 using BibleReader.Api.Data;
+using BibleReader.Api.Services;
 using BibleReader.Api.ViewModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -56,8 +57,14 @@ public class BibleController : ControllerBase
     }
 
     [HttpGet("books/{bookId:int}/chapters/{chapterNumber:int}")]
-    public async Task<IActionResult> ChapterContent(int bookId, int chapterNumber, [FromServices] AppDbContext db)
+    public async Task<IActionResult> ChapterContent(
+        int bookId,
+        int chapterNumber,
+        [FromServices] AppDbContext db,
+        [FromServices] BibleChapterTextSyncService textSync)
     {
+        await textSync.EnsureChapterTextAsync(db, bookId, chapterNumber, HttpContext.RequestAborted);
+
         var chapter = await db.BibleChapters
             .AsNoTracking()
             .Include(c => c.BibleBook)
@@ -83,8 +90,15 @@ public class BibleController : ControllerBase
     }
 
     [HttpGet("books/{bookId:int}/chapters/{chapterNumber:int}/verses/{verseNumber:int}")]
-    public async Task<IActionResult> Verse(int bookId, int chapterNumber, int verseNumber, [FromServices] AppDbContext db)
+    public async Task<IActionResult> Verse(
+        int bookId,
+        int chapterNumber,
+        int verseNumber,
+        [FromServices] AppDbContext db,
+        [FromServices] BibleChapterTextSyncService textSync)
     {
+        await textSync.EnsureChapterTextAsync(db, bookId, chapterNumber, HttpContext.RequestAborted);
+
         var chapter = await db.BibleChapters
             .AsNoTracking()
             .Include(c => c.BibleBook)
