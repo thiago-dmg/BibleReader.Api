@@ -8,14 +8,28 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddHttpClient<IBibleProviderService, AbibliaDigitalProviderService>(client =>
+builder.Services.Configure<ExternalBibleOptions>(
+    builder.Configuration.GetSection("ExternalBible"));
+
+builder.Services.AddHttpClient<IBibleProviderService, ApiBibleProviderService>((sp, client) =>
 {
-    client.Timeout = TimeSpan.FromSeconds(15);
+    var options = sp.GetRequiredService<IOptions<ExternalBibleOptions>>().Value;
+
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+
+    if (!string.IsNullOrWhiteSpace(options.ApiKey))
+        client.DefaultRequestHeaders.Add("api-key", options.ApiKey);
+
+    if (!string.IsNullOrWhiteSpace(options.UserAgent))
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(options.UserAgent);
 });
 
 var sqlConnection = builder.Configuration.GetConnectionString("Default")
@@ -29,7 +43,6 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ReadingPlanService>();
 builder.Services.AddScoped<BibleSeedService>();
 builder.Services.AddScoped<BibleChapterTextSyncService>();
-builder.Services.AddAbibliadigitalClient(builder.Configuration);
 
 if (string.IsNullOrWhiteSpace(builder.Configuration["SendGrid:ApiKey"]))
     builder.Services.AddSingleton<IEmailService, NullEmailService>();
@@ -40,6 +53,7 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
+
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 builder.Services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
@@ -49,6 +63,7 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.CustomSchemaIds(type => type.FullName ?? type.Name);
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Bíblia Reader API", Version = "v1" });
+
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -58,12 +73,17 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "Bearer {token}"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
             },
             Array.Empty<string>()
         }
