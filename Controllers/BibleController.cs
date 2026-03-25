@@ -21,38 +21,35 @@ public class BibleController : ControllerBase
 
     [HttpGet("books")]
     public async Task<IActionResult> Books(
-        [FromQuery] string versionCode,
-        [FromServices] AppDbContext db,
-        [FromServices] IBibleProviderService bibleProvider)
+    [FromQuery] string versionCode,
+    [FromServices] AppDbContext db,
+    [FromServices] IBibleProviderService bibleProvider)
     {
         if (string.IsNullOrWhiteSpace(versionCode))
             return BadRequest(new ResultViewModel<string>("versionCode é obrigatório"));
 
-        var booksFromProvider = await bibleProvider.GetBooksAsync(versionCode, HttpContext.RequestAborted);
+        var booksFromProvider = (await bibleProvider.GetBooksAsync(versionCode, HttpContext.RequestAborted)).ToList();
 
-        // Mantém compatibilidade com IDs locais usados no plano de leitura
         var localBooks = await db.BibleBooks
             .AsNoTracking()
-            .Include(b => b.BibleVersion)
-            .Where(b => b.BibleVersion.Code == versionCode)
             .OrderBy(b => b.Order)
             .ToListAsync(HttpContext.RequestAborted);
 
-        var result = localBooks.Select(local =>
+        var result = booksFromProvider.Select(providerBook =>
         {
-            var providerBook = booksFromProvider.FirstOrDefault(x =>
-                x.Abbreviation.ToLower() == local.Abbreviation.ToLower() ||
-                x.Name.ToLower() == local.Name.ToLower());
+            var local = localBooks.FirstOrDefault(x =>
+                x.Abbreviation.ToLower() == providerBook.Abbreviation.ToLower() ||
+                x.Name.ToLower() == providerBook.Name.ToLower());
 
             return new
             {
-                local.Id,
-                local.Order,
-                local.Slug,
-                local.Name,
-                local.Abbreviation,
-                local.ChapterCount,
-                externalId = providerBook?.ExternalId
+                id = local?.Id,
+                order = local?.Order,
+                slug = local?.Slug,
+                name = providerBook.Name,
+                abbreviation = providerBook.Abbreviation,
+                chapterCount = local?.ChapterCount ?? providerBook.ChapterCount,
+                externalId = providerBook.ExternalId
             };
         });
 
