@@ -21,9 +21,9 @@ public class BibleController : ControllerBase
 
     [HttpGet("books")]
     public async Task<IActionResult> Books(
-    [FromQuery] string versionCode,
-    [FromServices] AppDbContext db,
-    [FromServices] IBibleProviderService bibleProvider)
+        [FromQuery] string versionCode,
+        [FromServices] AppDbContext db,
+        [FromServices] IBibleProviderService bibleProvider)
     {
         if (string.IsNullOrWhiteSpace(versionCode))
             return BadRequest(new ResultViewModel<string>("versionCode é obrigatório"));
@@ -74,44 +74,29 @@ public class BibleController : ControllerBase
         return Ok(new ResultViewModel<object>(list));
     }
 
-    [HttpGet("books/{bookId:int}/chapters/{chapterNumber:int}")]
+    [HttpGet("books/{bookExternalId}/chapters/{chapterNumber:int}")]
     public async Task<IActionResult> ChapterContent(
-        int bookId,
+        string bookExternalId,
         int chapterNumber,
         [FromQuery] string versionCode,
-        [FromServices] AppDbContext db,
         [FromServices] IBibleProviderService bibleProvider)
     {
         if (string.IsNullOrWhiteSpace(versionCode))
             return BadRequest(new ResultViewModel<string>("versionCode é obrigatório"));
 
-        var chapter = await db.BibleChapters
-            .AsNoTracking()
-            .Include(c => c.BibleBook)
-            .ThenInclude(b => b.BibleVersion)
-            .FirstOrDefaultAsync(c => c.BibleBookId == bookId && c.ChapterNumber == chapterNumber, HttpContext.RequestAborted);
+        if (string.IsNullOrWhiteSpace(bookExternalId))
+            return BadRequest(new ResultViewModel<string>("bookExternalId é obrigatório"));
 
-        if (chapter == null)
-            return NotFound(new ResultViewModel<string>("Capítulo não encontrado"));
-
-        var externalBookId = chapter.BibleBook.Abbreviation;
         var chapterData = await bibleProvider.GetChapterAsync(
             versionCode,
-            externalBookId,
+            bookExternalId,
             chapterNumber,
             HttpContext.RequestAborted);
 
         return Ok(new ResultViewModel<object>(new
         {
-            chapter.Id,
-            book = new
-            {
-                chapter.BibleBook.Id,
-                chapter.BibleBook.Name,
-                chapter.BibleBook.Slug,
-                chapter.BibleBook.Abbreviation
-            },
-            chapter.ChapterNumber,
+            bookExternalId,
+            chapterNumber,
             verses = chapterData.Verses.Select(v => new
             {
                 verseNumber = v.Number,
@@ -120,31 +105,23 @@ public class BibleController : ControllerBase
         }));
     }
 
-    [HttpGet("books/{bookId:int}/chapters/{chapterNumber:int}/verses/{verseNumber:int}")]
+    [HttpGet("books/{bookExternalId}/chapters/{chapterNumber:int}/verses/{verseNumber:int}")]
     public async Task<IActionResult> Verse(
-        int bookId,
+        string bookExternalId,
         int chapterNumber,
         int verseNumber,
         [FromQuery] string versionCode,
-        [FromServices] AppDbContext db,
         [FromServices] IBibleProviderService bibleProvider)
     {
         if (string.IsNullOrWhiteSpace(versionCode))
             return BadRequest(new ResultViewModel<string>("versionCode é obrigatório"));
 
-        var chapter = await db.BibleChapters
-            .AsNoTracking()
-            .Include(c => c.BibleBook)
-            .FirstOrDefaultAsync(c => c.BibleBookId == bookId && c.ChapterNumber == chapterNumber, HttpContext.RequestAborted);
-
-        if (chapter == null)
-            return NotFound(new ResultViewModel<string>("Capítulo não encontrado"));
-
-        var externalBookId = chapter.BibleBook.Abbreviation;
+        if (string.IsNullOrWhiteSpace(bookExternalId))
+            return BadRequest(new ResultViewModel<string>("bookExternalId é obrigatório"));
 
         var verse = await bibleProvider.GetVerseAsync(
             versionCode,
-            externalBookId,
+            bookExternalId,
             chapterNumber,
             verseNumber,
             HttpContext.RequestAborted);
@@ -154,12 +131,8 @@ public class BibleController : ControllerBase
 
         return Ok(new ResultViewModel<object>(new
         {
-            book = new
-            {
-                chapter.BibleBook.Id,
-                chapter.BibleBook.Name
-            },
-            chapter.ChapterNumber,
+            bookExternalId,
+            chapterNumber,
             verseNumber = verse.Number,
             text = verse.Text
         }));
