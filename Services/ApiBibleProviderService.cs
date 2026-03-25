@@ -91,22 +91,26 @@ public class ApiBibleProviderService : IBibleProviderService
 
         using var request = CreateRequest(
             HttpMethod.Get,
-            $"bibles/{versionCode}/chapters/{chapterId}?content-type=json&include-notes=false&include-titles=false&include-chapter-numbers=false&include-verse-numbers=true");
+            $"bibles/{versionCode}/chapters/{chapterId}/verses");
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
 
         await EnsureSuccessAsync(response);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var payload = await JsonSerializer.DeserializeAsync<ApiBibleObjectResponse<ApiBibleChapterItem>>(
+        var payload = await JsonSerializer.DeserializeAsync<ApiBibleListResponse<ApiBibleVerseItem>>(
             stream,
             JsonOptions,
             cancellationToken);
 
-        if (payload?.Data is null)
-            throw new HttpRequestException("A API da Bíblia retornou um capítulo vazio.");
-
-        var verses = ExtractVerses(payload.Data.Content).ToList();
+        var verses = payload?.Data?
+            .Select(v => new BibleVerseDto
+            {
+                Number = ParseVerseNumber(v.Number, v.Id),
+                Text = v.Text ?? string.Empty
+            })
+            .Where(v => v.Number > 0 && !string.IsNullOrWhiteSpace(v.Text))
+            .ToList() ?? new List<BibleVerseDto>();
 
         return new BibleChapterDto
         {
@@ -123,8 +127,40 @@ public class ApiBibleProviderService : IBibleProviderService
         int verseNumber,
         CancellationToken cancellationToken = default)
     {
-        var chapter = await GetChapterAsync(versionCode, bookExternalId, chapterNumber, cancellationToken);
-        return chapter.Verses.FirstOrDefault(x => x.Number == verseNumber);
+        ValidateConfig();
+
+        versionCode = ResolveVersionCode(versionCode);
+
+        if (string.IsNullOrWhiteSpace(bookExternalId))
+            throw new InvalidOperationException("bookExternalId é obrigatório.");
+
+        var verseId = $"{bookExternalId}.{chapterNumber}.{verseNumber}";
+
+        using var request = CreateRequest(
+            HttpMethod.Get,
+            $"bibles/{versionCode}/verses/{verseId}");
+
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+
+        await EnsureSuccessAsync(response);
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var payload = await JsonSerializer.DeserializeAsync<ApiBibleObjectResponse<ApiBibleVerseItem>>(
+            stream,
+            JsonOptions,
+            cancellationToken);
+
+        if (payload?.Data is null)
+            return null;
+
+        return new BibleVerseDto
+        {
+            Number = ParseVerseNumber(payload.Data.Number, payload.Data.Id),
+            Text = payload.Data.Text ?? string.Empty
+        };
     }
 
     private void ValidateConfig()
@@ -182,69 +218,18 @@ public class ApiBibleProviderService : IBibleProviderService
             $"Falha ao chamar API da Bíblia. Status: {(int)response.StatusCode}. Body: {body}");
     }
 
-    private static IEnumerable<BibleVerseDto> ExtractVerses(List<ApiBibleContentNode>? nodes)
+    private static int ParseVerseNumber(string? number, string? id)
     {
-        if (nodes is null)
-            yield break;
+        if (int.TryParse(number, out var parsed))
+            return parsed;
 
-        foreach (var node in nodes)
+        if (!string.IsNullOrWhiteSpace(id))
         {
-            foreach (var verse in ExtractVersesRecursive(node))
-                yield return verse;
-        }
-    }
-
-    private static IEnumerable<BibleVerseDto> ExtractVersesRecursive(ApiBibleContentNode? node)
-    {
-        if (node is null)
-            yield break;
-
-        if (string.Equals(node.Type, "verse", StringComparison.OrdinalIgnoreCase))
-        {
-            int.TryParse(node.Number, out var verseNumber);
-
-            var text = ExtractText(node).Trim();
-
-            if (!string.IsNullOrWhiteSpace(text))
-            {
-                yield return new BibleVerseDto
-                {
-                    Number = verseNumber,
-                    Text = text
-                };
-            }
+            var last = id.Split('.').LastOrDefault();
+            if (int.TryParse(last, out parsed))
+                return parsed;
         }
 
-        if (node.Items is null)
-            yield break;
-
-        foreach (var child in node.Items)
-        {
-            foreach (var verse in ExtractVersesRecursive(child))
-                yield return verse;
-        }
-    }
-
-    private static string ExtractText(ApiBibleContentNode? node)
-    {
-        if (node is null)
-            return string.Empty;
-
-        var parts = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(node.Text))
-            parts.Add(node.Text);
-
-        if (node.Items is not null)
-        {
-            foreach (var child in node.Items)
-            {
-                var text = ExtractText(child);
-                if (!string.IsNullOrWhiteSpace(text))
-                    parts.Add(text);
-            }
-        }
-
-        return string.Join(" ", parts);
+        return 0;
     }
 }

@@ -31,17 +31,9 @@ public class ApiBibleBookItem
     public string? Abbreviation { get; set; }
 }
 
-public class ApiBibleChapterItem
+public class ApiBibleVerseItem
 {
     public string? Id { get; set; }
     public string? Number { get; set; }
-    public List<ApiBibleContentNode>? Content { get; set; }
-}
-
-public class ApiBibleContentNode
-{
-    public string? Type { get; set; }
-    public string? Number { get; set; }
     public string? Text { get; set; }
-    public List<ApiBibleContentNode>? Items { get; set; }
 }
