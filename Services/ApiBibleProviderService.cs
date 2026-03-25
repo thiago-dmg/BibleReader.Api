@@ -159,7 +159,7 @@ public class ApiBibleProviderService : IBibleProviderService
         return new BibleVerseDto
         {
             Number = ParseVerseNumber(payload.Data.Number, payload.Data.Id),
-            Text = payload.Data.Text ?? string.Empty
+            Text = (payload.Data.Content ?? payload.Data.Text ?? string.Empty).Trim()
         };
     }
 
