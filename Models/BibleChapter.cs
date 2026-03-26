@@ -9,5 +9,4 @@ public class BibleChapter
     public int GlobalOrder { get; set; }
 
     public BibleBook BibleBook { get; set; } = null!;
-    public ICollection<BibleVerse> Verses { get; set; } = new List<BibleVerse>();
 }

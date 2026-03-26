@@ -14,7 +14,6 @@ public class AppDbContext : DbContext
     public DbSet<BibleVersion> BibleVersions => Set<BibleVersion>();
     public DbSet<BibleBook> BibleBooks => Set<BibleBook>();
     public DbSet<BibleChapter> BibleChapters => Set<BibleChapter>();
-    public DbSet<BibleVerse> BibleVerses => Set<BibleVerse>();
 
     public DbSet<UserReadingPlan> UserReadingPlans => Set<UserReadingPlan>();
     public DbSet<ReadingPlanDay> ReadingPlanDays => Set<ReadingPlanDay>();

@@ -38,8 +38,8 @@ public class BibleController : ControllerBase
         var result = booksFromProvider.Select(providerBook =>
         {
             var local = localBooks.FirstOrDefault(x =>
-                x.Abbreviation.ToLower() == providerBook.Abbreviation.ToLower() ||
-                x.Name.ToLower() == providerBook.Name.ToLower());
+            string.Equals(x.Abbreviation, providerBook.Abbreviation, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(x.Name, providerBook.Name, StringComparison.OrdinalIgnoreCase));
 
             return new
             {
@@ -137,29 +137,5 @@ public class BibleController : ControllerBase
             text = verse.Text
         }));
     }
-
-    [HttpGet("chapters")]
-    public async Task<IActionResult> AllChapters([FromQuery] int versionId, [FromServices] AppDbContext db)
-    {
-        var bookIds = await db.BibleBooks
-            .AsNoTracking()
-            .Where(b => b.BibleVersionId == versionId)
-            .Select(b => b.Id)
-            .ToListAsync(HttpContext.RequestAborted);
-
-        var list = await db.BibleChapters
-            .AsNoTracking()
-            .Where(c => bookIds.Contains(c.BibleBookId))
-            .OrderBy(c => c.GlobalOrder)
-            .Select(c => new
-            {
-                c.Id,
-                c.BibleBookId,
-                c.ChapterNumber,
-                c.GlobalOrder
-            })
-            .ToListAsync(HttpContext.RequestAborted);
-
-        return Ok(new ResultViewModel<object>(list));
-    }
+   
 }

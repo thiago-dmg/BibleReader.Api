@@ -54,7 +54,11 @@ public class AuthController : ControllerBase
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var verificationToken = new EmailVerificationToken { AppUserId = user.Id };
+        var verificationToken = new EmailVerificationToken
+        {
+            AppUserId = user.Id
+        };
+
         db.EmailVerificationTokens.Add(verificationToken);
         await db.SaveChangesAsync();
 
@@ -134,6 +138,9 @@ public class AuthController : ControllerBase
         if (user == null || !BCrypt.Net.BCrypt.Verify(model.Password, user.PasswordHash))
             return Unauthorized(new ResultViewModel<string>("E-mail ou senha inválidos"));
 
+        if (!user.EmailVerified)
+            return Unauthorized(new ResultViewModel<string>("Confirme seu e-mail antes de entrar"));
+
         var token = tokenService.GenerateToken(user);
 
         return Ok(new ResultViewModel<object>(new
@@ -152,24 +159,13 @@ public class AuthController : ControllerBase
         [FromBody] VerifyEmailViewModel model,
         [FromServices] AppDbContext db)
     {
-        if (string.IsNullOrWhiteSpace(model.Token))
+        if (model == null || string.IsNullOrWhiteSpace(model.Token))
             return BadRequest(new ResultViewModel<string>("Token inválido"));
 
         return await VerifyCoreAsync(model.Token, db);
     }
 
-    [AllowAnonymous]
-    [HttpGet("verify-email")]
-    public async Task<IActionResult> VerifyEmailGet(
-        [FromQuery] string token,
-        [FromServices] AppDbContext db)
-    {
-        if (string.IsNullOrWhiteSpace(token))
-            return BadRequest(new ResultViewModel<string>("Token inválido"));
-
-        return await VerifyCoreAsync(token, db);
-    }
-
+    [ApiExplorerSettings(IgnoreApi = true)]
     [AllowAnonymous]
     [HttpGet("/verify-email")]
     public async Task<IActionResult> VerifyEmailPage(
@@ -269,7 +265,11 @@ public class AuthController : ControllerBase
         if (user == null)
             return Ok(new ResultViewModel<string>("Se o e-mail existir, você receberá instruções."));
 
-        var reset = new PasswordResetToken { AppUserId = user.Id };
+        var reset = new PasswordResetToken
+        {
+            AppUserId = user.Id
+        };
+
         db.PasswordResetTokens.Add(reset);
         await db.SaveChangesAsync();
 
@@ -328,6 +328,7 @@ public class AuthController : ControllerBase
         return Ok(new ResultViewModel<string>("Se o e-mail existir, você receberá instruções."));
     }
 
+    [ApiExplorerSettings(IgnoreApi = true)]
     [AllowAnonymous]
     [HttpGet("/reset-password")]
     public IActionResult ResetPasswordPage([FromQuery] string token)
@@ -335,7 +336,7 @@ public class AuthController : ControllerBase
         var html = LoadTemplate("reset-password.html");
 
         if (string.IsNullOrWhiteSpace(html))
-            return Content(GetResetPasswordFallbackHtml(token ?? ""), "text/html; charset=utf-8");
+            return Content(GetResetPasswordFallbackHtml(token ?? string.Empty), "text/html; charset=utf-8");
 
         html = html.Replace("{{TOKEN}}", WebUtility.HtmlEncode(token ?? string.Empty));
         return Content(html, "text/html; charset=utf-8");

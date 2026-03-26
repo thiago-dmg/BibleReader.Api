@@ -11,7 +11,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,7 +41,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<ReadingPlanService>();
 builder.Services.AddScoped<BibleSeedService>();
-builder.Services.AddScoped<BibleChapterTextSyncService>();
 
 if (string.IsNullOrWhiteSpace(builder.Configuration["SendGrid:ApiKey"]))
     builder.Services.AddSingleton<IEmailService, NullEmailService>();
