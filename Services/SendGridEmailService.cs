@@ -1,6 +1,7 @@
 using BibleReader.Api.Interfaces;
 using SendGrid;
 using SendGrid.Helpers.Mail;
+using System.Net;
 
 namespace BibleReader.Api.Services;
 
@@ -27,6 +28,15 @@ public class SendGridEmailService : IEmailService
         var from = new EmailAddress(fromEmail, fromName);
         var toEmail = new EmailAddress(to);
         var msg = MailHelper.CreateSingleEmail(from, toEmail, subject, null, htmlContent);
-        await client.SendEmailAsync(msg, ct);
+        var response = await client.SendEmailAsync(msg, ct);
+        if ((int)response.StatusCode < 200 || (int)response.StatusCode >= 300)
+        {
+            var body = await response.Body.ReadAsStringAsync(ct);
+            var snippet = string.IsNullOrWhiteSpace(body)
+                ? "sem detalhe"
+                : (body.Length > 500 ? body[..500] : body);
+            throw new InvalidOperationException(
+                $"Falha no SendGrid ({(int)response.StatusCode} {response.StatusCode}): {snippet}");
+        }
     }
 }

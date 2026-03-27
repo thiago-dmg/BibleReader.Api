@@ -117,6 +117,9 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Falha ao enviar e-mail de verificação");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable,
+                new ResultViewModel<string>(
+                    "Não foi possível enviar o e-mail de confirmação agora. Tente novamente em instantes."));
         }
 
         return Ok(new ResultViewModel<string>("Cadastro realizado. Verifique seu e-mail."));
