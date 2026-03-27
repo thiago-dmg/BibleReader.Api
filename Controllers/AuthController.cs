@@ -139,7 +139,10 @@ public class AuthController : ControllerBase
             return Unauthorized(new ResultViewModel<string>("E-mail ou senha inválidos"));
 
         if (!user.EmailVerified)
-            return Unauthorized(new ResultViewModel<string>("Confirme seu e-mail antes de entrar"));
+        {
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new ResultViewModel<string>("Confirme seu e-mail antes de entrar"));
+        }
 
         var token = tokenService.GenerateToken(user);
 
@@ -157,12 +160,15 @@ public class AuthController : ControllerBase
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmailPost(
         [FromBody] VerifyEmailViewModel model,
-        [FromServices] AppDbContext db)
+        [FromServices] AppDbContext db,
+        [FromServices] TokenService tokenService)
     {
         if (model == null || string.IsNullOrWhiteSpace(model.Token))
             return BadRequest(new ResultViewModel<string>("Token inválido"));
 
-        return await VerifyCoreAsync(model.Token, db);
+        var token = model.Token.Trim();
+        var email = string.IsNullOrWhiteSpace(model.Email) ? null : model.Email.Trim();
+        return await VerifyCoreAsync(token, email, db, tokenService, issueJwt: true);
     }
 
     [ApiExplorerSettings(IgnoreApi = true)]
@@ -228,7 +234,13 @@ public class AuthController : ControllerBase
         return Content(html, "text/html; charset=utf-8");
     }
 
-    private async Task<IActionResult> VerifyCoreAsync(string token, AppDbContext db)
+    /// <param name="issueJwt">Quando true (POST do app), retorna o mesmo formato do login para entrar direto.</param>
+    private async Task<IActionResult> VerifyCoreAsync(
+        string token,
+        string? email,
+        AppDbContext db,
+        TokenService tokenService,
+        bool issueJwt)
     {
         var verification = await db.EmailVerificationTokens
             .Include(x => x.AppUser)
@@ -240,9 +252,28 @@ public class AuthController : ControllerBase
         if (verification.ExpiresAt < DateTime.UtcNow)
             return BadRequest(new ResultViewModel<string>("Token expirado"));
 
+        if (!string.IsNullOrWhiteSpace(email) &&
+            !string.Equals(verification.AppUser.Email, email, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new ResultViewModel<string>("E-mail não confere com o link de verificação"));
+        }
+
         verification.AppUser.EmailVerified = true;
         db.EmailVerificationTokens.Remove(verification);
         await db.SaveChangesAsync();
+
+        if (issueJwt)
+        {
+            var jwt = tokenService.GenerateToken(verification.AppUser);
+            return Ok(new ResultViewModel<object>(new
+            {
+                token = jwt,
+                userId = verification.AppUser.Id,
+                displayName = verification.AppUser.DisplayName,
+                email = verification.AppUser.Email,
+                emailVerified = true
+            }));
+        }
 
         return Ok(new ResultViewModel<string>("E-mail confirmado com sucesso"));
     }
